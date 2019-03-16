@@ -28,7 +28,7 @@ import java.util.Map;
 public class RNTesseractOcrModule extends ReactContextBaseJavaModule {
 
 	private final ReactApplicationContext reactContext;
-	private TessBaseAPI tessBaseApi;
+	private static TessBaseAPI tessBaseApi;
 
 	@VisibleForTesting
 	private static final String REACT_CLASS = "RNTesseractOcr";
@@ -139,6 +139,47 @@ public class RNTesseractOcrModule extends ReactContextBaseJavaModule {
 	}
 
 	@ReactMethod
+    public void initTesseract(String lang, @Nullable ReadableMap tessOptions, Promise promise) {
+        prepareTesseract();
+        if (tessBaseApi != null) {
+            tessBaseApi.stop();
+            tessBaseApi.end();
+        }
+        try {
+            tessBaseApi = new TessBaseAPI();
+        } catch (Exception e) {
+            Log.e(REACT_CLASS, e.getMessage());
+            if (tessBaseApi == null) {
+                Log.e(REACT_CLASS, "TessBaseAPI is null. TessFactory is not returning tess object.");
+            }
+            promise.reject("An error occurred", e.getMessage());
+            return;
+        }
+
+        tessBaseApi.init(DATA_PATH, getConstants().get(lang).toString());
+
+        if (tessOptions != null) {
+
+            //  //Whitelist - List of characters you want to detect
+            if (tessOptions.hasKey("whitelist") && tessOptions.getString("whitelist") != null
+                    && !tessOptions.getString("whitelist").isEmpty()) {
+                Log.d(REACT_CLASS, "Whitelist: " + tessOptions.getString("whitelist"));
+                tessBaseApi.setVariable(TessBaseAPI.VAR_CHAR_WHITELIST, tessOptions.getString("whitelist"));
+            }
+
+            //  //Blacklist - List of characters you DON'T want to detect
+            if (tessOptions.hasKey("blacklist") && tessOptions.getString("blacklist") != null
+                    && !tessOptions.getString("blacklist").isEmpty()) {
+                Log.d(REACT_CLASS, "Blacklist: " + tessOptions.getString("blacklist"));
+                tessBaseApi.setVariable(TessBaseAPI.VAR_CHAR_BLACKLIST, tessOptions.getString("blacklist"));
+            }
+        }
+
+        Log.d(REACT_CLASS, "Training file loaded");
+        promise.resolve(null);
+    }
+
+	@ReactMethod
 	public void stop(Promise promise) {
 		try {
 			tessBaseApi.stop();
@@ -152,13 +193,11 @@ public class RNTesseractOcrModule extends ReactContextBaseJavaModule {
 	@Deprecated
 	@ReactMethod
 	public void startOcr(String path, String lang, Promise promise) {
-		this.recognize(path, lang, null, promise);
+		this.recognize(path, promise);
 	}
 
 	@ReactMethod
-	public void recognize(String path, String lang, @Nullable ReadableMap tessOptions, Promise promise) {
-		prepareTesseract();
-
+	public void recognize(String path, Promise promise) {
 		Log.d(REACT_CLASS, "Start ocr images");
 
 		try {
@@ -171,7 +210,7 @@ public class RNTesseractOcrModule extends ReactContextBaseJavaModule {
 			//options.inSampleSize = 4; //inSampleSize documentation --> http://goo.gl/KRrlvi
 			Bitmap bitmap = BitmapFactory.decodeFile(path, options);
 
-			String result = extractText(bitmap, lang, tessOptions);
+			String result = extractText(bitmap);
 
 			promise.resolve(result);
 
@@ -181,37 +220,7 @@ public class RNTesseractOcrModule extends ReactContextBaseJavaModule {
 		}
 	}
 
-	private String extractText(Bitmap bitmap, String lang, @Nullable final ReadableMap tessOptions) {
-		try {
-			tessBaseApi = new TessBaseAPI();
-		} catch (Exception e) {
-			Log.e(REACT_CLASS, e.getMessage());
-			if (tessBaseApi == null) {
-				Log.e(REACT_CLASS, "TessBaseAPI is null. TessFactory is not returning tess object.");
-			}
-		}
-
-		tessBaseApi.init(DATA_PATH, getConstants().get(lang).toString());
-
-		if (tessOptions != null) {
-
-			//  //Whitelist - List of characters you want to detect
-			if (tessOptions.hasKey("whitelist") && tessOptions.getString("whitelist") != null
-					&& !tessOptions.getString("whitelist").isEmpty()) {
-				Log.d(REACT_CLASS, "Whitelist: " + tessOptions.getString("whitelist"));
-				tessBaseApi.setVariable(TessBaseAPI.VAR_CHAR_WHITELIST, tessOptions.getString("whitelist"));
-			}
-
-			//  //Blacklist - List of characters you DON'T want to detect
-			if (tessOptions.hasKey("blacklist") && tessOptions.getString("blacklist") != null
-					&& !tessOptions.getString("blacklist").isEmpty()) {
-				Log.d(REACT_CLASS, "Blacklist: " + tessOptions.getString("blacklist"));
-				tessBaseApi.setVariable(TessBaseAPI.VAR_CHAR_BLACKLIST, tessOptions.getString("blacklist"));
-			}
-		}
-
-		Log.d(REACT_CLASS, "Training file loaded");
-
+	private String extractText(Bitmap bitmap) {
 		tessBaseApi.setImage(bitmap);
 
 		String extractedText = "Empty result";
@@ -220,8 +229,6 @@ public class RNTesseractOcrModule extends ReactContextBaseJavaModule {
 		} catch (Exception e) {
 			Log.e(REACT_CLASS, "Error in recognizing text: " + e.getMessage());
 		}
-
-		tessBaseApi.end();
 
 		return extractedText;
 	}
