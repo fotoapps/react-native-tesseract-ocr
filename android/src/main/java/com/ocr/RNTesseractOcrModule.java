@@ -1,5 +1,5 @@
 
-package com.reactlibrary;
+package com.ocr;
 
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
